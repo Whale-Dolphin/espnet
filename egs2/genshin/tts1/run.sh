@@ -19,7 +19,7 @@ fi
 
 train_set=tr_no_dev
 valid_set=dev
-test_sets="dev eval1"
+test_sets=eval1
 
 train_config=conf/train.yaml
 inference_config=conf/decode.yaml

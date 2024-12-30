@@ -116,6 +116,19 @@ lang=noinfo      # The language type of corpus.
 text_fold_length=150   # fold_length for text data.
 speech_fold_length=800 # fold_length for speech data.
 
+# VERSA eval related
+skip_scoring=true # Skip scoring stages.
+whisper_tag=medium # Whisper model tag.
+whisper_dir=local/whisper # Whisper model directory.
+cleaner=whisper_en # Text cleaner for whisper model.
+hyp_cleaner=whisper_en # Text cleaner for hypothesis.
+
+versa_eval_params=(
+    mos
+    spk
+) # Parameters for VERSA evaluation.
+
+
 # Upload model related
 hf_repo=
 
@@ -195,6 +208,10 @@ Options:
     --vocoder_file      # Vocoder paramemter file (default=${vocoder_file}).
                         # If set to none, Griffin-Lim vocoder will be used.
     --download_model    # Download a model from Model Zoo and use it for decoding (default="${download_model}").
+
+    # VERSA scroing related
+    --skip_scoring      # Skip scoring stages (default="${skip_scoring}").
+    --versa_eval_params # Parameters for VERSA evaluation (default="${versa_eval_params[@]}").
 
     # [Task dependent] Set the datadir name created by local/data.sh.
     --train_set          # Name of training set (required).
@@ -1111,12 +1128,186 @@ else
     log "Skip the evaluation stages"
 fi
 
+if ! "${skip_scoring}"; then
+    if [ ${stage} -le 9 ] && [ ${stop_stage} -ge 9 ]; then
+        ./scripts/utils/evaluate_asr.sh \
+            --whisper_tag ${whisper_tag} \
+            --whisper_dir ${whisper_dir} \
+            --cleaner ${cleaner} \
+            --hyp_cleaner ${hyp_cleaner} \
+            --inference_nj ${inference_nj} \
+            --nj ${nj} \
+            --gt_text ${data}/text \
+            --gpu_inference ${gpu_inference} \
+            ${gen_dir}/wav.scp ${gen_dir}/scoring/eval_wer
+
+        for eval_item in versa_eval_params; do
+            eval_flag=eval_${eval_item}
+            if ${!eval_flag}; then
+                opts=
+                eval_dir=${tts_exp}/scoring/eval_${eval_item}; mkdir -p ${eval_dir}
+
+                # (2) define pred, ref and config
+                if [ ${eval_item} == "mos" ]; then
+                    pred_file=${tts_exp}/wav.scp
+                    score_config=${mos_config}
+                    gt_file=
+                elif [ ${eval_item} == "spk" ]; then
+                    pred_file=${tts_exp}/wav.scp
+                    score_config=${spk_config}
+                    gt_file=${ref_dir}/utt2spk
+                fi
+
+                # (3) split
+                _nj=$(min "${inference_nj}" "$(<${pred_file} wc -l)" )
+
+                split_files=""
+                for n in `seq ${_nj}`; do
+                    split_files+="${eval_dir}/pred.${n} "
+                done
+                utils/split_scp.pl ${pred_file} ${split_files}
+
+                if [ -n "${gt_file}" ]; then
+                    split_files=""
+                    for n in `seq ${_nj}`; do
+                        split_files+="${eval_dir}/gt.${n} "
+                    done
+                    utils/split_scp.pl ${gt_file} ${split_files}
+                    opts+="--gt ${eval_dir}/gt.JOB"
+                fi
+
+                # (4) score
+                if ${gpu_inference}; then
+                    _cmd="${cuda_cmd}"
+                    _ngpu=1
+                else
+                    _cmd="${decode_cmd}"
+                    _ngpu=0
+                fi
+
+                ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${eval_dir}"/eval_${eval_item}.JOB.log \
+                    ${python} -m versa.bin.espnet_scorer \
+                        --pred ${eval_dir}/pred.JOB \
+                        --score_config ${score_config} \
+                        --use_gpu ${gpu_inference} \
+                        --output_file ${eval_dir}/result.JOB.txt \
+                        --io soundfile \
+                        ${opts} || exit 1;
+
+                # (5) aggregate
+                pyscripts/utils/aggregate_eval.py \
+                    --logdir ${eval_dir} \
+                    --scoredir ${eval_dir} \
+                    --nj ${_nj}
+            fi
+        done
+    fi
+fi
+
+
+# if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
+#     # User VERSA
+#     for eval_item in mos spk; do
+#         eval_flag=eval_${eval_item}
+#         if ${!eval_flag}; then
+#             # (1) init
+#             opts=
+#             eval_dir=${gen_dir}/scoring/eval_${eval_item}; mkdir -p ${eval_dir}
+
+#             # (2) define pred, ref and config
+#             if [ ${eval_item} == "mos" ]; then
+#                 pred_file=${gen_dir}/wav.scp
+#                 score_config=${mos_config}
+#                 gt_file=
+#             elif [ ${eval_item} == "spk" ]; then
+#                 pred_file=${gen_dir}/wav.scp
+#                 score_config=${spk_config}
+#                 gt_file=${ref_dir}/utt2spk
+#             fi
+
+#             # (3) split
+#             _nj=$(min "${inference_nj}" "$(<${pred_file} wc -l)" )
+
+#             split_files=""
+#             for n in `seq ${_nj}`; do
+#                 split_files+="${eval_dir}/pred.${n} "
+#             done
+#             utils/split_scp.pl ${pred_file} ${split_files}
+
+#             if [ -n "${gt_file}" ]; then
+#                 split_files=""
+#                 for n in `seq ${_nj}`; do
+#                     split_files+="${eval_dir}/gt.${n} "
+#                 done
+#                 utils/split_scp.pl ${gt_file} ${split_files}
+#                 opts+="--gt ${eval_dir}/gt.JOB"
+#             fi
+
+#             # (4) score
+#             if ${gpu_inference}; then
+#                 _cmd="${cuda_cmd}"
+#                 _ngpu=1
+#             else
+#                 _cmd="${decode_cmd}"
+#                 _ngpu=0
+#             fi
+
+#             ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${eval_dir}"/eval_${eval_item}.JOB.log \
+#                 ${python} -m versa.bin.espnet_scorer \
+#                     --pred ${eval_dir}/pred.JOB \
+#                     --score_config ${score_config} \
+#                     --use_gpu ${gpu_inference} \
+#                     --output_file ${eval_dir}/result.JOB.txt \
+#                     --io soundfile \
+#                     ${opts} || exit 1;
+
+#             # (5) aggregate
+#             pyscripts/utils/aggregate_eval.py \
+#                 --logdir ${eval_dir} \
+#                 --scoredir ${eval_dir} \
+#                 --nj ${_nj}
+
+#         else
+#             log "Skip evaluting ${eval_item}"
+#         fi
+#     done
+# fi
+
+# if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
+#     log "Summarize the results"
+
+#     all_eval_results=
+#     metrics=
+
+#     if ${eval_wer}; then
+#         all_eval_results+="${gen_dir}/scoring/eval_wer/utt_result.txt "
+#         metrics+="wer "
+#     fi
+
+#     if ${eval_spk}; then
+#         all_eval_results+="${gen_dir}/scoring/eval_spk/utt_result.txt "
+#         metrics+="spk_similarity "
+#     fi
+
+#     if ${eval_mos}; then
+#         all_eval_results+="${gen_dir}/scoring/eval_mos/utt_result.txt "
+#         metrics+="utmos "
+#     fi
+
+#     ${python} pyscripts/utils/result_summary.py \
+#         --all_eval_results ${all_eval_results} \
+#         --key_file ${key_file} \
+#         --output_dir ${gen_dir}/scoring \
+#         --metrics ${metrics} \
+#         --nbest ${nbest} \
+#         > ${gen_dir}/scoring/final_result.txt
+# fi
 
 packed_model="${tts_exp}/${tts_exp##*/}_${inference_model%.*}.zip"
 if ! "${skip_packing}" && [ -z "${download_model}" ]; then
     # Skip pack preparation if using a downloaded model or skip_packing is true
-    if [ ${stage} -le 9 ] && [ ${stop_stage} -ge 9 ]; then
-        log "Stage 9: Pack model: ${packed_model}"
+    if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ]; then
+        log "Stage 10: Pack model: ${packed_model}"
 
         _opts=""
         if [ -e "${tts_stats_dir}/train/feats_stats.npz" ]; then
@@ -1156,11 +1347,11 @@ else
 fi
 
 if ! "${skip_upload_hf}"; then
-    if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ]; then
+    if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ]; then
         [ -z "${hf_repo}" ] && \
             log "ERROR: You need to setup the variable hf_repo with the name of the repository located at HuggingFace" && \
             exit 1
-        log "Stage 10: Upload model to HuggingFace: ${hf_repo}"
+        log "Stage 11: Upload model to HuggingFace: ${hf_repo}"
 
     if [ ! -f "${packed_model}" ]; then
         log "ERROR: ${packed_model} does not exist. Please run stage 9 first."
