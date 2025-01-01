@@ -23,7 +23,7 @@ mos_config=mos.yaml # MOS evaluation configuration.
 spk_config=spk.yaml # Speaker evaluation configuration.
 
 versa_eval_params=(
-    mos
+    # mos
     spk
 ) # Parameters for VERSA evaluation.
 inference_tag=decode_vits_latest
