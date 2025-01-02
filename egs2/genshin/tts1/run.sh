@@ -21,8 +21,8 @@ train_set=tr_no_dev
 valid_set=dev
 test_sets=eval1
 
-train_config=conf/train_vits.yaml
-inference_config=conf/decode.yaml
+train_config=conf/train_full_band_multi_spk_vits.yaml
+inference_config=conf/decode_vits.yaml
 
 # g2p=g2p_en # Include word separator
 g2p=g2p_en_no_space # Include no word separator
@@ -43,6 +43,7 @@ g2p=g2p_en_no_space # Include no word separator
     --feats_normalize none \
     --train_config "${train_config}" \
     --inference_config "${inference_config}" \
+    --inference_model latest.pth \
     --train_set "${train_set}" \
     --valid_set "${valid_set}" \
     --test_sets "${test_sets}" \
