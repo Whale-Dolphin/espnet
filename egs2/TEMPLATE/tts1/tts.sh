@@ -117,13 +117,13 @@ text_fold_length=150   # fold_length for text data.
 speech_fold_length=800 # fold_length for speech data.
 
 # VERSA eval related
-skip_scoring=true # Skip scoring stages.
-skip_wer=true # Skip WER evaluation.
+skip_scoring=false # Skip scoring stages.
+skip_wer=false # Skip WER evaluation.
 whisper_tag=medium # Whisper model tag.
 whisper_dir=local/whisper # Whisper model directory.
 cleaner=whisper_en # Text cleaner for whisper model.
 hyp_cleaner=whisper_en # Text cleaner for hypothesis.
-versa_config=versa.yaml # VERSA evaluation configuration.
+versa_config=conf/versa.yaml # VERSA evaluation configuration.
 
 
 # Upload model related
@@ -206,9 +206,14 @@ Options:
                         # If set to none, Griffin-Lim vocoder will be used.
     --download_model    # Download a model from Model Zoo and use it for decoding (default="${download_model}").
 
-    # VERSA scroing related
+    # VERSA scoring related
     --skip_scoring      # Skip scoring stages (default="${skip_scoring}").
-    --versa_eval_params # Parameters for VERSA evaluation (default="${versa_eval_params[@]}").
+    --skip_wer          # Skip WER evaluation (default="${skip_wer}").
+    --whisper_tag       # Whisper model tag (default="${whisper_tag}").
+    --whisper_dir       # Whisper model directory (default="${whisper_dir}").
+    --cleaner           # Text cleaner for whisper model (default="${cleaner}").
+    --hyp_cleaner       # Text cleaner for hypothesis (default="${hyp_cleaner}").
+    --versa_config      # VERSA evaluation configuration (default="${versa_config}").
 
     # [Task dependent] Set the datadir name created by local/data.sh.
     --train_set          # Name of training set (required).
@@ -1127,8 +1132,9 @@ fi
 
 if ! "${skip_scoring}"; then
     if [ ${stage} -le 9 ] && [ ${stop_stage} -ge 9 ]; then
-        _gen_dir=${tts_exp}/${inference_tag}/${test_set}
-        _data=${data_feats}/${test_set}
+        _gen_dir=${tts_exp}/${inference_tag}/${test_sets}
+        log "Stage 9: Scoring: TTS scoring via versa logs on ${_gen_dir}"
+        _data=${data_feats}/${test_sets}
         if ! ${skip_wer}; then
             ./scripts/utils/evaluate_asr.sh \
                 --whisper_tag ${whisper_tag} \
@@ -1139,12 +1145,12 @@ if ! "${skip_scoring}"; then
                 --nj ${nj} \
                 --gt_text ${_data}/text \
                 --gpu_inference ${gpu_inference} \
-                ${_gen_dir}/wav/wav_test.scp ${_gen_dir}/scoring/eval_wer
+                ${_gen_dir}/wav/wav.scp ${_gen_dir}/scoring/eval_wer
             
-            echo "Finished WER evaluation, results are in ${_gen_dir}/scoring/eval_wer"
+            log "Finished WER evaluation, results are in ${_gen_dir}/scoring/eval_wer"
         fi
 
-        echo "Scoring TTS evaluation via VERSA, using default ${versa_config}. You can visit https://github.com/shinjiwlab/versa?tab=readme-ov-file#list-of-metrics for more supported metrics."
+        log "Scoring TTS evaluation via VERSA, using default ${versa_config}. You can visit https://github.com/shinjiwlab/versa?tab=readme-ov-file#list-of-metrics for more supported metrics."
         _opts=
         _eval_dir=${_gen_dir}/scoring/versa_eval
         mkdir -p ${_eval_dir}
@@ -1179,20 +1185,22 @@ if ! "${skip_scoring}"; then
         fi
 
         ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_eval_dir}"/versa_eval.JOB.log \
-        python -W ignore -m versa.bin.scorer \
-            --pred ${_eval_dir}/pred.JOB \
-            --score_config ${_score_config} \
-            --cache_folder ${_eval_dir}/cache \
-            --use_gpu ${gpu_inference} \
-            --output_file ${_eval_dir}/result.JOB.txt \
-            --io soundfile
+            python -m versa.bin.scorer \
+                --pred ${_eval_dir}/pred.JOB \
+                --score_config ${_score_config} \
+                --cache_folder ${_eval_dir}/cache \
+                --use_gpu ${gpu_inference} \
+                --output_file ${_eval_dir}/result.JOB.txt \
+                --io soundfile \
+                ${_opts} 2>&1;
 
-        python pyscripts/utils/aggregate_tts_eval.py \
+        python pyscripts/utils/aggregate_eval.py \
             --logdir ${_eval_dir} \
             --scoredir ${_eval_dir} \
             --nj ${_nj}
 
-        echo "Finished scoring evaluation, results are in ${_eval_dir}"
+        ./scripts/utils/show_tts_results.sh ${_gen_dir}/scoring/
+        log "Finished scoring evaluation, results are in ${_eval_dir}"
     fi
 fi
 

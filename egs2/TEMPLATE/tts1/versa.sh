@@ -19,12 +19,8 @@ whisper_dir=local/whisper # Whisper model directory.
 cleaner=whisper_en # Text cleaner for whisper model.
 hyp_cleaner=whisper_en # Text cleaner for hypothesis.
 
-versa_config=versa.yaml # VERSA evaluation configuration.
+versa_config=conf/versa.yaml # VERSA evaluation configuration.
 
-versa_eval_params=(
-    # mos
-    spk
-) # Parameters for VERSA evaluation.
 inference_tag=decode_vits_latest
 
 _gen_dir=${tts_exp}/${inference_tag}/${test_set}
