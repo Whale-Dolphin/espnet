@@ -1199,7 +1199,7 @@ if ! "${skip_scoring}"; then
             --scoredir ${_eval_dir} \
             --nj ${_nj}
 
-        ./scripts/utils/show_tts_results.sh ${_gen_dir}/scoring/
+        ./scripts/utils/show_tts_results.sh ${_gen_dir}
         log "Finished scoring evaluation, results are in ${_eval_dir}"
     fi
 fi

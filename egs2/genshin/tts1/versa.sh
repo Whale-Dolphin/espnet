@@ -1,1 +1,0 @@
-/mnt/users/whaledolphin/espnet/egs2/TEMPLATE/tts1/versa.sh
