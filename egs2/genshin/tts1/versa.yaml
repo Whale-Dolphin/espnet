@@ -1,0 +1,25 @@
+- name: mcd_f0
+  f0min: 40
+  f0max: 800
+  mcep_shift: 5
+  mcep_fftl: 1024
+  mcep_dim: 39
+  mcep_alpha: 0.466
+  seq_mismatch_tolerance: 0.1
+  power_threshold: -20
+  dtw: false
+
+- name: pseudo_mos
+  predictor_types: ["utmos", "dnsmos", "plcmos", "singmos"]
+  predictor_args:
+    utmos:
+      fs: 16000
+    dnsmos:
+      fs: 16000
+    plcmos:
+      fs: 16000
+    singmos:
+      fs: 16000
+
+- name: speaker
+  model_tag: default

@@ -55,7 +55,6 @@ egs*/*/*/pretrained_models*
 egs*/fisher_callhome_spanish/*/local/mapping*
 egs2/test/*
 **/checkpoints/
-**/scoring/
 
 # tools related
 tools/chainer

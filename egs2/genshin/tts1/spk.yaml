@@ -4,3 +4,15 @@
 #                    https://huggingface.co/espnet
 - name: speaker
   model_tag: default
+
+- name: pseudo_mos
+  predictor_types: ["utmos", "dnsmos", "plcmos", "singmos"]
+  predictor_args:
+    utmos:
+      fs: 16000
+    dnsmos:
+      fs: 16000
+    plcmos:
+      fs: 16000
+    singmos:
+      fs: 16000
